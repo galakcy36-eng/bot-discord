@@ -2,6 +2,8 @@ import discord
 import os
 
 intents = discord.Intents.default()
+intents.message_content = True  # 👈 OBLIGATOIRE
+
 client = discord.Client(intents=intents)
 
 @client.event
