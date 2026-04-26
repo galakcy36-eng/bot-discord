@@ -28,7 +28,7 @@ async def on_ready():
 @commands.has_permissions(manage_roles=True)
 async def addrole(ctx, member: discord.Member, role: discord.Role):
     await member.add_roles(role)
-    await ctx.send(f"✔ {member.mention} a reçu le rôle {role.name}")
+    await ctx.send(f"✔ {member.mention} a reçu {role.name}")
 
 # =========================
 # ⛔ TEMP BAN
@@ -37,7 +37,7 @@ async def addrole(ctx, member: discord.Member, role: discord.Role):
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, duration: int, *, reason=None):
     await member.ban(reason=reason)
-    await ctx.send(f"⛔ {member} banni pour {duration}s")
+    await ctx.send(f"⛔ {member} banni {duration}s")
 
     await asyncio.sleep(duration)
 
@@ -48,18 +48,36 @@ async def ban(ctx, member: discord.Member, duration: int, *, reason=None):
         pass
 
 # =========================
-# 🔇 TEMP MUTE
+# 🔓 UNBAN
+# =========================
+@bot.command()
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, user_id: int):
+    user = await bot.fetch_user(user_id)
+    await ctx.guild.unban(user)
+    await ctx.send(f"🔓 {user} débanni")
+
+# =========================
+# 🔇 MUTE
 # =========================
 @bot.command()
 @commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member, duration: int):
     until = datetime.now(timezone.utc) + timedelta(seconds=duration)
     await member.edit(timed_out_until=until)
-
     await ctx.send(f"🔇 {member.mention} mute {duration}s")
 
 # =========================
-# 🧹 CLEAR MESSAGES
+# 🔊 UNMUTE
+# =========================
+@bot.command()
+@commands.has_permissions(moderate_members=True)
+async def unmute(ctx, member: discord.Member):
+    await member.edit(timed_out_until=None)
+    await ctx.send(f"🔊 {member.mention} unmute")
+
+# =========================
+# 🧹 CLEAR
 # =========================
 @bot.command()
 @commands.has_permissions(manage_messages=True)
@@ -71,7 +89,7 @@ async def clear(ctx, amount: int):
     await ctx.send(f"🧹 {len(deleted)} messages supprimés", delete_after=3)
 
 # =========================
-# 🚨 ANTI-SPAM SIMPLE
+# 🚫 ANTI-SPAM
 # =========================
 user_messages = {}
 
@@ -90,66 +108,68 @@ async def on_message(message):
     user_messages[uid] = [t for t in user_messages[uid] if now - t < 5]
 
     if len(user_messages[uid]) > 5:
-        await message.channel.send(f"⚠️ {message.author.mention} anti-spam activé")
+        await message.channel.send(f"⚠️ {message.author.mention} stop spam")
         return
 
     await bot.process_commands(message)
 
 # =========================
-# 🎁 GIVEAWAY MODAL
-# =========================
-class GiveawayModal(discord.ui.Modal, title="Créer un Giveaway"):
-
-    name = discord.ui.TextInput(label="Nom du giveaway")
-    info = discord.ui.TextInput(label="Informations")
-    duration = discord.ui.TextInput(label="Durée (secondes)")
-    prize = discord.ui.TextInput(label="Gain")
-
-    async def on_submit(self, interaction: discord.Interaction):
-
-        embed = discord.Embed(
-            title=f"🎁 {self.name.value}",
-            description=f"""
-📌 Info : {self.info.value}
-🏆 Gain : {self.prize.value}
-⏳ Durée : {self.duration.value}s
-
-Réagis 🎉 pour participer !
-            """,
-            color=0xffcc00
-        )
-
-        msg = await interaction.channel.send(embed=embed)
-        await msg.add_reaction("🎉")
-
-        await interaction.response.send_message("🎁 Giveaway lancé !", ephemeral=True)
-
-        await asyncio.sleep(int(self.duration.value))
-
-        new_msg = await interaction.channel.fetch_message(msg.id)
-        users = [u async for u in new_msg.reactions[0].users()]
-        users = [u for u in users if not u.bot]
-
-        if not users:
-            await interaction.channel.send("❌ Aucun participant.")
-            return
-
-        winner = random.choice(users)
-
-        await interaction.channel.send(
-            f"🎉 GIVEAWAY TERMINÉ !\n"
-            f"🏆 Gagnant : {winner.mention}\n"
-            f"🎁 Gain : {self.prize.value}"
-        )
-
-# =========================
-# 🎁 GIVEAWAY COMMAND
+# 🎁 GIVEAWAY INTERACTIF
 # =========================
 @bot.command()
 async def giveaway(ctx):
-    await ctx.send_modal(GiveawayModal())
+
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+
+    await ctx.send("🎁 Nom du giveaway ?")
+    name = (await bot.wait_for("message", check=check)).content
+
+    await ctx.send("📌 Informations ?")
+    info = (await bot.wait_for("message", check=check)).content
+
+    await ctx.send("⏳ Durée en secondes ?")
+    duration = int((await bot.wait_for("message", check=check)).content)
+
+    await ctx.send("🏆 Gain ?")
+    prize = (await bot.wait_for("message", check=check)).content
+
+    embed = discord.Embed(
+        title=f"🎁 {name}",
+        description=f"""
+📌 Info : {info}
+🏆 Gain : {prize}
+⏳ Durée : {duration}s
+
+Réagis 🎉 pour participer !
+        """,
+        color=0xffcc00
+    )
+
+    msg = await ctx.send(embed=embed)
+    await msg.add_reaction("🎉")
+
+    await ctx.send("✅ Giveaway lancé !")
+
+    await asyncio.sleep(duration)
+
+    new_msg = await ctx.channel.fetch_message(msg.id)
+    users = [u async for u in new_msg.reactions[0].users()]
+    users = [u for u in users if not u.bot]
+
+    if not users:
+        await ctx.send("❌ Aucun participant.")
+        return
+
+    winner = random.choice(users)
+
+    await ctx.send(
+        f"🎉 GIVEAWAY TERMINÉ !\n"
+        f"🏆 Gagnant : {winner.mention}\n"
+        f"🎁 Gain : {prize}"
+    )
 
 # =========================
-# 🚀 RUN BOT
+# 🚀 RUN
 # =========================
 bot.run(os.environ["TOKEN"])
