@@ -29,7 +29,7 @@ async def on_ready():
     print(f"Connecté en tant que {bot.user}")
 
 # =========================
-# 🚫 ON_MESSAGE UNIQUE
+# 🚫 MESSAGE TRACKING
 # =========================
 @bot.event
 async def on_message(message):
@@ -37,7 +37,6 @@ async def on_message(message):
         return
 
     uid = message.author.id
-
     user_stats.setdefault(uid, {"messages": 0, "voice": 0, "join": None})
     user_stats[uid]["messages"] += 1
 
@@ -61,7 +60,7 @@ async def on_voice_state_update(member, before, after):
             user_stats[uid]["join"] = None
 
 # =========================
-# 🎁 VIEW GIVEAWAY
+# 🎁 GIVEAWAY VIEW
 # =========================
 class GiveawayView(discord.ui.View):
     def __init__(self, msg_id):
@@ -78,7 +77,6 @@ class GiveawayView(discord.ui.View):
         if not data:
             return await interaction.response.send_message("❌ Giveaway introuvable.", ephemeral=True)
 
-        # ⛔ FIN DU GIVEAWAY
         if data["ended"]:
             return await interaction.response.send_message("⛔ Giveaway terminé.", ephemeral=True)
 
@@ -88,7 +86,7 @@ class GiveawayView(discord.ui.View):
         # 🚫 BYPASS
         if any(r in member.roles for r in data["bypass"]):
             data["participants"].add(member.id)
-            return await interaction.response.send_message("✔ Bypass → participation acceptée.", ephemeral=True)
+            return await interaction.response.send_message("✔ Bypass accepté.", ephemeral=True)
 
         # 🎭 ROLE
         if data["role_req"] and data["role_req"] not in member.roles:
@@ -111,11 +109,10 @@ class GiveawayView(discord.ui.View):
             )
 
         data["participants"].add(member.id)
-
         await interaction.response.send_message("🎉 Tu participes au giveaway !", ephemeral=True)
 
     # =========================
-    # ❌ QUITTER
+    # ❌ QUITTER (FIXÉ)
     # =========================
     @discord.ui.button(label="Quitter", style=discord.ButtonStyle.danger)
     async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -124,7 +121,6 @@ class GiveawayView(discord.ui.View):
         if not data:
             return await interaction.response.send_message("❌ Giveaway introuvable.", ephemeral=True)
 
-        # ⛔ FIN
         if data["ended"]:
             return await interaction.response.send_message("⛔ Giveaway terminé.", ephemeral=True)
 
@@ -137,7 +133,6 @@ class GiveawayView(discord.ui.View):
             )
 
         data["participants"].discard(uid)
-
         await interaction.response.send_message("👋 Tu as quitté le giveaway.", ephemeral=True)
 
 # =========================
@@ -159,15 +154,15 @@ async def giveaway(ctx):
         winners = int((await bot.wait_for("message", timeout=60, check=check)).content)
 
         # ⏳ DURATION
-        await ctx.send("⏳ Durée (sec) ?")
+        await ctx.send("⏳ Durée (secondes) ?")
         duration = int((await bot.wait_for("message", timeout=60, check=check)).content)
 
-        # 💬 MSG
+        # 💬 MSG REQUIS
         await ctx.send("💬 Messages requis ?")
         msg_req = int((await bot.wait_for("message", timeout=60, check=check)).content)
 
-        # 🎙 VOCAL
-        await ctx.send("🎙 Vocal requis (sec) ?")
+        # 🎙 VOCAL REQUIS
+        await ctx.send("🎙 Vocal requis (secondes) ?")
         vc_req = int((await bot.wait_for("message", timeout=60, check=check)).content)
 
         # 🎭 ROLE
@@ -179,10 +174,6 @@ async def giveaway(ctx):
         await ctx.send("🚫 Ping rôles bypass (ou none)")
         r2 = await bot.wait_for("message", timeout=60, check=check)
         bypass = r2.role_mentions if r2.role_mentions else []
-
-        # 🖼 IMAGE
-        await ctx.send("🖼 URL image thumbnail")
-        image_url = (await bot.wait_for("message", timeout=60, check=check)).content
 
     except asyncio.TimeoutError:
         return await ctx.send("⏱️ Giveaway annulé (temps écoulé).")
@@ -205,8 +196,6 @@ async def giveaway(ctx):
         color=0x2f3136
     )
 
-    embed.set_thumbnail(url=image_url)
-
     msg = await ctx.send(embed=embed)
     view = GiveawayView(msg.id)
     await msg.edit(view=view)
@@ -226,7 +215,7 @@ async def giveaway(ctx):
     }
 
     # =========================
-    # ⏳ END GIVEAWAY
+    # ⏳ FIN GIVEAWAY
     # =========================
     await asyncio.sleep(duration)
 
