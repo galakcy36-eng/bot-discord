@@ -77,78 +77,77 @@ async def on_message(message):
 async def info(ctx):
 
     embed = discord.Embed(
-        title="📜 Commandes du serveur",
+        title="📜 Centre d'informations du bot",
         description=(
-            "Bienvenue sur le système de commandes du serveur.\n\n"
-            "Voici l’ensemble des fonctionnalités disponibles 👇"
+            "Bienvenue dans le panneau d'aide du bot.\n\n"
+            "Vous trouverez ici l'ensemble des commandes disponibles ainsi que leur utilisation.\n"
+            "Merci de respecter les règles du serveur lors de l'utilisation de ces commandes.\n\n"
+            "━━━━━━━━━━━━━━━━━━"
         ),
         color=0x2f3136
     )
 
     embed.add_field(
         name="🎁 Giveaway",
-        value="`+giveaway` → lancer un giveaway interactif",
+        value=(
+            "`+giveaway`\n"
+            "→ Lance un giveaway interactif.\n"
+            "Le bot vous posera plusieurs questions (lot, gagnants, durée).\n"
+            "Les membres participent avec 🎉 et un tirage est effectué automatiquement."
+        ),
         inline=False
     )
 
     embed.add_field(
-        name="🎟 Tickets",
-        value="`+setupticket` → créer le système de support complet",
+        name="🎟 Système de tickets",
+        value=(
+            "`+setupticket`\n"
+            "→ Configure un panneau de support.\n\n"
+            "Catégories disponibles :\n"
+            "• 🚨 Report → signaler un problème\n"
+            "• 💰 Donations → soutenir le serveur\n"
+            "• 🧑‍💼 Recrutement → rejoindre le staff\n"
+            "• 🛠 Support → aide générale\n\n"
+            "Un membre du staff prendra en charge le ticket."
+        ),
         inline=False
     )
 
     embed.add_field(
         name="🧹 Modération",
-        value="`+clear` `+ban` `+unban` `+mute` `+unmute`",
+        value=(
+            "`+clear <nombre>` → supprimer des messages\n"
+            "`+ban @user` → bannir\n"
+            "`+unban <id>` → débannir\n"
+            "`+mute @user <temps>` → mute\n"
+            "`+unmute @user` → unmute"
+        ),
         inline=False
     )
 
     embed.add_field(
-        name="⚙️ Système",
-        value="• Anti-spam actif\n• Système de temps avancé (1d 2h 5m)\n• Stats utilisateurs (messages/vocal)",
+        name="⏱ Temps supporté",
+        value=(
+            "`10s` `5m` `2h` `1d` `1w` `1o`\n"
+            "Combinaisons possibles : `1h30m`, `2d5h`"
+        ),
         inline=False
     )
 
+    embed.add_field(
+        name="🛡 Systèmes automatiques",
+        value=(
+            "• Anti-spam\n"
+            "• Gestion tickets\n"
+            "• Tirage giveaway automatique\n"
+            "• Interface interactive"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text=f"Demandé par {ctx.author}", icon_url=ctx.author.avatar)
+
     await ctx.send(embed=embed)
-
-# =========================
-# MODERATION
-# =========================
-@bot.command()
-@commands.has_permissions(manage_messages=True)
-async def clear(ctx, amount: int):
-    amount = max(1, min(amount, 100))
-    await ctx.channel.purge(limit=amount + 1)
-    msg = await ctx.send("🧹 Messages supprimés")
-    await asyncio.sleep(2)
-    await msg.delete()
-
-@bot.command()
-@commands.has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member):
-    await member.ban()
-    await ctx.send(f"⛔ {member.mention} a été banni.")
-
-@bot.command()
-@commands.has_permissions(ban_members=True)
-async def unban(ctx, user_id: int):
-    user = await bot.fetch_user(user_id)
-    await ctx.guild.unban(user)
-    await ctx.send(f"🔓 {user} a été débanni.")
-
-@bot.command()
-@commands.has_permissions(moderate_members=True)
-async def mute(ctx, member: discord.Member, time: str):
-    seconds = parse_time(time)
-    await member.edit(timed_out_until=datetime.now(timezone.utc) + timedelta(seconds=seconds))
-    await ctx.send(f"🔇 {member.mention} mute {time}")
-
-@bot.command()
-@commands.has_permissions(moderate_members=True)
-async def unmute(ctx, member: discord.Member):
-    await member.edit(timed_out_until=None)
-    await ctx.send(f"🔊 {member.mention} unmute")
-
 # =========================
 # GIVEAWAY
 # =========================
