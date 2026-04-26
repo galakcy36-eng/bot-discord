@@ -21,6 +21,8 @@ bot = commands.Bot(command_prefix="+", intents=intents)
 # =========================
 user_stats = {}
 giveaways = {}
+ticket_config = {}
+ticket_claimed = {}
 
 # =========================
 # ⏱ TIME PARSER
@@ -87,56 +89,43 @@ async def on_voice_state_update(member, before, after):
             user_stats[uid]["join"] = None
 
 # =========================
-# 📜 INFO UPDATED
+# 📜 INFO
 # =========================
 @bot.command()
 async def info(ctx):
     embed = discord.Embed(
         title="📜 Commandes du bot",
-        description="Voici toutes les fonctionnalités disponibles 👇",
+        description="Toutes les fonctionnalités disponibles 👇",
         color=0x2f3136
     )
 
     embed.add_field(
         name="🎁 Giveaway",
-        value=(
-            "`+giveaway` → créer un giveaway complet\n"
-            "• système privé + public\n"
-            "• boutons participer / quitter\n"
-            "• conditions (messages, vocal, rôle)"
-        ),
+        value="+giveaway → système complet avec boutons + conditions",
         inline=False
     )
 
     embed.add_field(
         name="🎟 Tickets",
-        value=(
-            "`+setupticket` → panel tickets (menu)\n"
-            "`+close` → fermer un ticket\n"
-            "• Report / Donations / Recrutement / Support"
-        ),
+        value="+setupticket → panel tickets + roles + claim/close",
         inline=False
     )
 
     embed.add_field(
         name="🧹 Modération",
         value=(
-            "`+clear <nombre>` → supprimer messages\n"
-            "`+ban @user` → bannir\n"
-            "`+unban <id>` → débannir\n"
-            "`+mute @user <temps>` → mute\n"
-            "`+unmute @user` → unmute"
+            "+clear <nbr>\n"
+            "+ban @user\n"
+            "+unban <id>\n"
+            "+mute @user <temps>\n"
+            "+unmute @user"
         ),
         inline=False
     )
 
     embed.add_field(
         name="⚙️ Système",
-        value=(
-            "• stats messages + vocal\n"
-            "• système temps (1d 2h 5m etc)\n"
-            "• interface boutons & menus"
-        ),
+        value="stats messages + vocal + temps avancé (1d 2h 5m)",
         inline=False
     )
 
@@ -148,10 +137,8 @@ async def info(ctx):
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
-
     amount = max(1, min(amount, 100))
     deleted = await ctx.channel.purge(limit=amount + 1)
-
     msg = await ctx.send(f"🧹 {len(deleted)-1} messages supprimés.")
     await asyncio.sleep(3)
     await msg.delete()
@@ -180,7 +167,6 @@ async def unban(ctx, user_id: int):
 async def mute(ctx, member: discord.Member, time: str):
     seconds = parse_time(time)
     until = datetime.now(timezone.utc) + timedelta(seconds=seconds)
-
     await member.edit(timed_out_until=until)
     await ctx.send(f"🔇 {member.mention} mute {time}.")
 
@@ -191,7 +177,7 @@ async def unmute(ctx, member: discord.Member):
     await ctx.send(f"🔊 {member.mention} unmute.")
 
 # =========================
-# 🎟 TICKETS MENU
+# 🎟 TICKETS PANEL
 # =========================
 class TicketSelect(discord.ui.Select):
     def __init__(self):
@@ -205,8 +191,6 @@ class TicketSelect(discord.ui.Select):
 
         super().__init__(
             placeholder="🎟 Choisis un type de ticket...",
-            min_values=1,
-            max_values=1,
             options=options
         )
 
@@ -218,10 +202,7 @@ class TicketSelect(discord.ui.Select):
 
         existing = discord.utils.get(guild.text_channels, name=f"ticket-{user.name}".lower())
         if existing:
-            return await interaction.response.send_message(
-                "❌ Tu as déjà un ticket ouvert.",
-                ephemeral=True
-            )
+            return await interaction.response.send_message("❌ Tu as déjà un ticket.", ephemeral=True)
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -229,63 +210,99 @@ class TicketSelect(discord.ui.Select):
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         }
 
+        # ajout staff selon config
+        staff_role = ticket_config.get(guild.id, {}).get(choice)
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
         channel = await guild.create_text_channel(
             name=f"ticket-{choice}-{user.name}".lower(),
-            overwrites=overwrites,
-            topic=f"{choice} ticket de {user}"
+            overwrites=overwrites
         )
+
+        ticket_claimed[channel.id] = None
 
         await channel.send(
-            f"🎟 **Ticket {choice} ouvert**\n"
+            f"🎟 Ticket {choice} ouvert\n"
             f"{user.mention}\n\n"
-            f"Explique ton problème ici.\n"
-            f"❌ `+close` pour fermer"
+            f"Utilise les boutons 👇",
+            view=TicketControlView()
         )
 
-        await interaction.response.send_message(
-            f"🎟 Ticket créé : {channel.mention}",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"🎟 Ticket créé : {channel.mention}", ephemeral=True)
 
 class TicketView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__()
         self.add_item(TicketSelect())
 
 # =========================
-# 🎟 SETUP PANEL
+# 🎟 SETUP TICKETS (ROLES STAFF)
 # =========================
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setupticket(ctx):
 
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+
+    async def ask(msg):
+        q = await ctx.send(msg)
+        r = await bot.wait_for("message", check=check)
+        await q.delete()
+        await r.delete()
+        return r.role_mentions
+
+    ticket_config[ctx.guild.id] = {
+        "Report": (await ask("🎭 rôle staff REPORT ?"))[0],
+        "Donations": (await ask("🎭 rôle staff DONATIONS ?"))[0],
+        "Recrutement": (await ask("🎭 rôle staff RECRUTEMENT ?"))[0],
+        "Support": (await ask("🎭 rôle staff SUPPORT ?"))[0],
+    }
+
     embed = discord.Embed(
         title="🎟 Support Tickets",
-        description=(
-            "Choisis une catégorie :\n\n"
-            "🚨 Report\n"
-            "💰 Donations\n"
-            "🧑‍💼 Recrutement\n"
-            "🛠 Support\n\n"
-            "⚠️ 1 ticket par utilisateur"
-        ),
+        description="Choisis une catégorie dans le menu 👇",
         color=0x2f3136
     )
 
     await ctx.send(embed=embed, view=TicketView())
 
 # =========================
-# ❌ CLOSE TICKET
+# 🔘 TICKET BUTTONS
 # =========================
-@bot.command()
-async def close(ctx):
+class TicketControlView(discord.ui.View):
 
-    if not ctx.channel.name.startswith("ticket-"):
-        return await ctx.send("❌ Pas un ticket.")
+    @discord.ui.button(label="🟢 Claim", style=discord.ButtonStyle.success)
+    async def claim(self, interaction, button):
 
-    await ctx.send("🔒 Fermeture dans 5 secondes...")
-    await asyncio.sleep(5)
-    await ctx.channel.delete()
+        guild = interaction.guild
+        config = ticket_config.get(guild.id, {})
+        allowed = list(config.values())
+
+        if not any(r in interaction.user.roles for r in allowed):
+            return await interaction.response.send_message("❌ Staff only.", ephemeral=True)
+
+        if ticket_claimed.get(interaction.channel.id):
+            return await interaction.response.send_message("❌ Déjà claim.", ephemeral=True)
+
+        ticket_claimed[interaction.channel.id] = interaction.user.id
+        await interaction.channel.send(f"🟢 Claim par {interaction.user.mention}")
+        await interaction.response.send_message("✔ Claim OK", ephemeral=True)
+
+    @discord.ui.button(label="❌ Close", style=discord.ButtonStyle.danger)
+    async def close(self, interaction, button):
+
+        guild = interaction.guild
+        config = ticket_config.get(guild.id, {})
+        allowed = list(config.values())
+
+        if not any(r in interaction.user.roles for r in allowed):
+            return await interaction.response.send_message("❌ Staff only.", ephemeral=True)
+
+        await interaction.response.send_message("🔒 Fermeture...", ephemeral=True)
+        await asyncio.sleep(3)
+        await interaction.channel.delete()
 
 # =========================
 # 🚀 RUN
