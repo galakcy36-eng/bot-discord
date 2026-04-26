@@ -30,7 +30,6 @@ def parse_time(time_str: str):
     matches = re.findall(pattern, time_str.lower())
 
     seconds = 0
-
     for value, unit in matches:
         value = int(value)
 
@@ -44,7 +43,7 @@ def parse_time(time_str: str):
             seconds += value * 86400
         elif unit == "w":
             seconds += value * 604800
-        elif unit == "o":  # mois approx
+        elif unit == "o":
             seconds += value * 2592000
 
     return seconds
@@ -95,12 +94,12 @@ async def info(ctx):
     embed = discord.Embed(
         title="📜 Commandes du bot",
         description=(
-            "🎁 `+giveaway`\n"
-            "🧹 `+clear <nombre>`\n"
-            "⛔ `+ban @user [raison]`\n"
-            "🔓 `+unban <id>`\n"
-            "🔇 `+mute @user <temps>`\n"
-            "🔊 `+unmute @user`"
+            "🎁 +giveaway\n"
+            "🧹 +clear\n"
+            "⛔ +ban\n"
+            "🔓 +unban\n"
+            "🔇 +mute\n"
+            "🔊 +unmute"
         ),
         color=0x2f3136
     )
@@ -113,13 +112,10 @@ async def info(ctx):
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
 
-    if amount <= 0:
-        return await ctx.send("❌ Nombre invalide.")
-
-    amount = min(amount, 100)
-
+    amount = max(1, min(amount, 100))
     deleted = await ctx.channel.purge(limit=amount + 1)
-    msg = await ctx.send(f"🧹 {len(deleted)-1} messages supprimés")
+
+    msg = await ctx.send(f"🧹 {len(deleted)-1} messages supprimés avec succès.")
     await asyncio.sleep(3)
     await msg.delete()
 
@@ -130,7 +126,7 @@ async def clear(ctx, amount: int):
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason=None):
     await member.ban(reason=reason)
-    await ctx.send(f"⛔ {member} banni.")
+    await ctx.send(f"⛔ {member.mention} a été banni du serveur.")
 
 # =========================
 # 🔓 UNBAN
@@ -140,7 +136,7 @@ async def ban(ctx, member: discord.Member, *, reason=None):
 async def unban(ctx, user_id: int):
     user = await bot.fetch_user(user_id)
     await ctx.guild.unban(user)
-    await ctx.send(f"🔓 {user} débanni.")
+    await ctx.send(f"🔓 {user} a été débanni.")
 
 # =========================
 # 🔇 MUTE
@@ -150,8 +146,9 @@ async def unban(ctx, user_id: int):
 async def mute(ctx, member: discord.Member, time: str):
     seconds = parse_time(time)
     until = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+
     await member.edit(timed_out_until=until)
-    await ctx.send(f"🔇 {member} mute {time}")
+    await ctx.send(f"🔇 {member.mention} a été réduit au silence pendant {time}.")
 
 # =========================
 # 🔊 UNMUTE
@@ -160,7 +157,7 @@ async def mute(ctx, member: discord.Member, time: str):
 @commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member):
     await member.edit(timed_out_until=None)
-    await ctx.send(f"🔊 {member} unmute")
+    await ctx.send(f"🔊 {member.mention} peut à nouveau parler.")
 
 # =========================
 # 🎁 GIVEAWAY VIEW
@@ -170,54 +167,66 @@ class GiveawayView(discord.ui.View):
         super().__init__(timeout=None)
         self.msg_id = msg_id
 
-    @discord.ui.button(label="Participer", style=discord.ButtonStyle.success)
+    # 🎉 PARTICIPER
+    @discord.ui.button(label="🎉 Participer", style=discord.ButtonStyle.success)
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         data = giveaways.get(self.msg_id)
         if not data or data["ended"]:
-            return await interaction.response.send_message("⛔ Giveaway terminé.", ephemeral=True)
+            return await interaction.response.send_message("⛔ Ce giveaway est terminé.", ephemeral=True)
 
         member = interaction.user
-        missing = []
-
-        if any(r in member.roles for r in data["bypass"]):
-            data["participants"].add(member.id)
-            return await interaction.response.send_message("✔ Bypass OK.", ephemeral=True)
-
         stats = user_stats.get(member.id, {"messages": 0, "voice": 0})
 
+        missing = []
+
+        # 🎭 ROLE
         if data["role_req"] and data["role_req"] not in member.roles:
-            missing.append("🎭 rôle requis")
+            missing.append(f"🎭 Rôle requis : {data['role_req'].mention}")
 
+        # 💬 MSG
         if stats["messages"] < data["msg_req"]:
-            missing.append("💬 messages insuffisants")
+            missing.append(f"💬 Messages requis : {data['msg_req']}")
 
+        # 🎙 VOCAL
         if stats["voice"] < data["vc_req"]:
-            missing.append("🎙 vocal insuffisant")
+            missing.append(f"🎙 Temps vocal requis : {data['vc_req']}s")
 
         if missing:
             return await interaction.response.send_message(
-                "❌ Conditions manquantes : " + ", ".join(missing),
+                "❌ Tu ne remplis pas les conditions :\n" + "\n".join(missing),
                 ephemeral=True
             )
 
         data["participants"].add(member.id)
-        await interaction.response.send_message("🎉 inscrit !", ephemeral=True)
 
-    @discord.ui.button(label="Quitter", style=discord.ButtonStyle.danger)
+        await interaction.response.send_message(
+            "🎉 Tu viens de rejoindre le giveaway ! Bonne chance 🍀",
+            ephemeral=True
+        )
+
+    # ❌ QUITTER
+    @discord.ui.button(label="❌ Quitter", style=discord.ButtonStyle.danger)
     async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         data = giveaways.get(self.msg_id)
         if not data or data["ended"]:
-            return await interaction.response.send_message("⛔ Giveaway terminé.", ephemeral=True)
+            return await interaction.response.send_message("⛔ Ce giveaway est terminé.", ephemeral=True)
 
         uid = interaction.user.id
 
         if uid not in data["participants"]:
-            return await interaction.response.send_message("❌ Pas inscrit.", ephemeral=True)
+            return await interaction.response.send_message(
+                "❌ Tu n'es pas inscrit au giveaway.",
+                ephemeral=True
+            )
 
-        data["participants"].discard(uid)
-        await interaction.response.send_message("👋 quitté.", ephemeral=True)
+        data["participants"].remove(uid)
+
+        await interaction.response.send_message(
+            "👋 Tu as quitté le giveaway. Dommage, ta chance s'envole...",
+            ephemeral=True
+        )
 
 # =========================
 # 🎁 GIVEAWAY
@@ -228,39 +237,41 @@ async def giveaway(ctx):
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel
 
-    await ctx.send("🎁 Lot ?")
+    await ctx.send("🎁 Quel est le lot ?")
     prize = (await bot.wait_for("message", check=check)).content
 
-    await ctx.send("👥 gagnants ?")
+    await ctx.send("👥 Nombre de gagnants ?")
     winners = int((await bot.wait_for("message", check=check)).content)
 
-    await ctx.send("⏱ durée (ex: 1d 2h 5m) ?")
+    await ctx.send("⏱ Durée (ex: 1d 2h 10m) ?")
     duration = parse_time((await bot.wait_for("message", check=check)).content)
 
-    await ctx.send("💬 messages requis ?")
+    await ctx.send("💬 Messages requis ?")
     msg_req = int((await bot.wait_for("message", check=check)).content)
 
-    await ctx.send("🎙 vocal requis ?")
+    await ctx.send("🎙 Temps vocal requis ?")
     vc_req = int((await bot.wait_for("message", check=check)).content)
 
-    await ctx.send("🎭 rôle requis (ping ou none)")
+    await ctx.send("🎭 Rôle requis (ping ou none)")
     r = await bot.wait_for("message", check=check)
     role_req = r.role_mentions[0] if r.role_mentions else None
 
-    await ctx.send("🚫 bypass rôles (ping ou none)")
+    await ctx.send("🚫 Rôles bypass (ping ou none)")
     r2 = await bot.wait_for("message", check=check)
     bypass = r2.role_mentions if r2.role_mentions else []
 
     end = datetime.now(timezone.utc) + timedelta(seconds=duration)
 
     embed = discord.Embed(
-        title="🎁 GIVEAWAY",
+        title="🎁 GIVEAWAY EN COURS",
         description=(
-            f"🏆 {prize}\n"
-            f"👑 {ctx.author.mention}\n\n"
-            f"💬 {msg_req} messages\n"
-            f"🎙 {vc_req} vocal\n"
-            f"⏳ fin <t:{int(end.timestamp())}:R>"
+            f"🏆 **Lot :** {prize}\n"
+            f"👑 **Organisateur :** {ctx.author.mention}\n\n"
+            f"📜 **Conditions :**\n"
+            f"💬 Messages : {msg_req}\n"
+            f"🎙 Vocal : {vc_req}\n"
+            f"🎭 Rôle : {role_req.mention if role_req else 'Aucun'}\n\n"
+            f"⏳ Fin : <t:{int(end.timestamp())}:R>"
         ),
         color=0x2f3136
     )
@@ -291,12 +302,16 @@ async def giveaway(ctx):
     participants = list(data["participants"])
 
     if not participants:
-        return await ctx.send("❌ aucun participant.")
+        return await ctx.send("❌ Aucun participant au giveaway.")
 
     winners_list = random.sample(participants, min(winners, len(participants)))
     mentions = " ".join(f"<@{i}>" for i in winners_list)
 
-    await ctx.send(f"🎉 gagnant(s) : {mentions}")
+    await ctx.send(
+        f"🎉 **GIVEAWAY TERMINÉ !**\n"
+        f"🏆 Félicitations à {mentions} !\n"
+        f"🎁 Lot : {prize}"
+    )
 
 # =========================
 # 🚀 RUN
