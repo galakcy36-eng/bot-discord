@@ -31,7 +31,7 @@ async def addrole(ctx, member: discord.Member, role: discord.Role):
     await ctx.send(f"✔ {member.mention} a reçu {role.name}")
 
 # =========================
-# ⛔ TEMP BAN
+# ⛔ BAN (TEMP)
 # =========================
 @bot.command()
 @commands.has_permissions(ban_members=True)
@@ -82,9 +82,7 @@ async def unmute(ctx, member: discord.Member):
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
-    if amount > 100:
-        amount = 100
-
+    amount = min(amount, 100)
     deleted = await ctx.channel.purge(limit=amount)
     await ctx.send(f"🧹 {len(deleted)} messages supprimés", delete_after=3)
 
@@ -101,10 +99,9 @@ async def on_message(message):
     uid = message.author.id
     now = datetime.now().timestamp()
 
-    if uid not in user_messages:
-        user_messages[uid] = []
-
+    user_messages.setdefault(uid, [])
     user_messages[uid].append(now)
+
     user_messages[uid] = [t for t in user_messages[uid] if now - t < 5]
 
     if len(user_messages[uid]) > 5:
@@ -114,7 +111,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # =========================
-# 🎁 GIVEAWAY (NOUVEAU)
+# 🎁 GIVEAWAY PRO
 # =========================
 @bot.command()
 async def giveaway(ctx):
@@ -122,33 +119,48 @@ async def giveaway(ctx):
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel
 
-    # QUESTIONS
-    q1 = await ctx.send("🎁 Lot (ex: 3x Nitro)")
-    r1 = await bot.wait_for("message", check=check)
-    prize = r1.content
-    await q1.delete(); await r1.delete()
+    try:
+        # 🎁 LOT
+        q1 = await ctx.send("🎁 Quel est le lot ?")
+        r1 = await bot.wait_for("message", check=check)
+        prize = r1.content
+        await q1.delete(); await r1.delete()
 
-    q2 = await ctx.send("👥 Nombre de gagnants ?")
-    r2 = await bot.wait_for("message", check=check)
-    winners_count = int(r2.content)
-    await q2.delete(); await r2.delete()
+        # 👥 GAGNANTS
+        q2 = await ctx.send("👥 Nombre de gagnants ?")
+        r2 = await bot.wait_for("message", check=check)
 
-    q3 = await ctx.send("⏳ Durée en secondes ?")
-    r3 = await bot.wait_for("message", check=check)
-    duration = int(r3.content)
-    await q3.delete(); await r3.delete()
+        try:
+            winners_count = int(r2.content)
+        except:
+            return await ctx.send("❌ Nombre invalide.")
 
+        await q2.delete(); await r2.delete()
+
+        # ⏳ DURÉE
+        q3 = await ctx.send("⏳ Durée en secondes ?")
+        r3 = await bot.wait_for("message", check=check)
+
+        try:
+            duration = int(r3.content)
+        except:
+            return await ctx.send("❌ Durée invalide.")
+
+        await q3.delete(); await r3.delete()
+
+    except asyncio.TimeoutError:
+        return await ctx.send("⏱️ Temps écoulé, giveaway annulé.")
+
+    # 🎉 EMBED
     end_time = datetime.now(timezone.utc) + timedelta(seconds=duration)
 
     embed = discord.Embed(
-        title="🎁 Giveaway",
+        title="🎁 GIVEAWAY",
         description=(
             f"🏆 **Lot :** {prize}\n"
             f"👥 **Gagnants :** {winners_count}\n"
             f"⏱ **Fin :** <t:{int(end_time.timestamp())}:R>\n\n"
-            f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"👥 **Participants :** 0\n"
-            f"👑 **Hôte :** {ctx.author.mention}"
+            f"👥 **Participants :** 0"
         ),
         color=0x2f3136
     )
@@ -156,38 +168,23 @@ async def giveaway(ctx):
     msg = await ctx.send(embed=embed)
     await msg.add_reaction("🎉")
 
-    # UPDATE LIVE
-    for _ in range(duration // 5):
-        await asyncio.sleep(5)
+    await asyncio.sleep(duration)
 
-        new_msg = await ctx.channel.fetch_message(msg.id)
-        users = [u async for u in new_msg.reactions[0].users()]
-        users = [u for u in users if not u.bot]
-
-        embed.description = (
-            f"🏆 **Lot :** {prize}\n"
-            f"👥 **Gagnants :** {winners_count}\n"
-            f"⏱ **Fin :** <t:{int(end_time.timestamp())}:R>\n\n"
-            f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"👥 **Participants :** {len(users)}\n"
-            f"👑 **Hôte :** {ctx.author.mention}"
-        )
-
-        await msg.edit(embed=embed)
-
-    await asyncio.sleep(duration % 5)
-
-    # FINAL RESULT
+    # 🔍 PARTICIPANTS
     new_msg = await ctx.channel.fetch_message(msg.id)
-    users = [u async for u in new_msg.reactions[0].users()]
+
+    if not new_msg.reactions:
+        return await ctx.send("❌ Aucun participant.")
+
+    reaction = new_msg.reactions[0]
+    users = [u async for u in reaction.users()]
     users = [u for u in users if not u.bot]
 
     if not users:
-        await ctx.send("❌ Aucun participant.")
-        return
+        return await ctx.send("❌ Aucun participant.")
 
     winners = random.sample(users, min(winners_count, len(users)))
-    winners_mentions = " ".join([w.mention for w in winners])
+    winners_mentions = " ".join(w.mention for w in winners)
 
     embed.color = 0x00ff99
     embed.add_field(name="🏆 Gagnant(s)", value=winners_mentions, inline=False)
@@ -197,6 +194,6 @@ async def giveaway(ctx):
     await ctx.send(f"🎉 Félicitations {winners_mentions} !")
 
 # =========================
-# 🚀 RUN
+# 🚀 RUN BOT
 # =========================
 bot.run(os.environ["TOKEN"])
