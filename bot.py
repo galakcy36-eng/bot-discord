@@ -21,7 +21,6 @@ bot = commands.Bot(command_prefix="+", intents=intents)
 # =========================
 ticket_config = {}
 ticket_claimed = {}
-user_stats = {}
 spam_cache = {}
 
 # =========================
@@ -40,6 +39,7 @@ def parse_time(time_str: str):
         elif unit == "d": seconds += value * 86400
         elif unit == "w": seconds += value * 604800
         elif unit == "o": seconds += value * 2592000
+
     return seconds
 
 # =========================
@@ -50,7 +50,7 @@ async def on_ready():
     print(f"Connecté en tant que {bot.user}")
 
 # =========================
-# ANTI SPAM SIMPLE
+# ANTI-SPAM
 # =========================
 @bot.event
 async def on_message(message):
@@ -65,27 +65,47 @@ async def on_message(message):
     spam_cache[uid] = [t for t in spam_cache[uid] if now - t < 5]
 
     if len(spam_cache[uid]) > 5:
-        await message.channel.send(f"⚠️ {message.author.mention} stop spam")
+        await message.channel.send(f"⚠️ {message.author.mention} merci de ralentir vos messages.")
         return
 
     await bot.process_commands(message)
 
 # =========================
-# INFO
+# INFO (VERSION PLUS DÉTAILLÉE)
 # =========================
 @bot.command()
 async def info(ctx):
+
     embed = discord.Embed(
-        title="📜 Commandes du bot",
-        description="Voici toutes les commandes disponibles 👇",
+        title="📜 Commandes du serveur",
+        description=(
+            "Bienvenue sur le système de commandes du serveur.\n\n"
+            "Voici l’ensemble des fonctionnalités disponibles 👇"
+        ),
         color=0x2f3136
     )
 
-    embed.add_field(name="🎁 Giveaway", value="`+giveaway`", inline=False)
-    embed.add_field(name="🎟 Tickets", value="`+setupticket`", inline=False)
+    embed.add_field(
+        name="🎁 Giveaway",
+        value="`+giveaway` → lancer un giveaway interactif",
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎟 Tickets",
+        value="`+setupticket` → créer le système de support complet",
+        inline=False
+    )
+
     embed.add_field(
         name="🧹 Modération",
         value="`+clear` `+ban` `+unban` `+mute` `+unmute`",
+        inline=False
+    )
+
+    embed.add_field(
+        name="⚙️ Système",
+        value="• Anti-spam actif\n• Système de temps avancé (1d 2h 5m)\n• Stats utilisateurs (messages/vocal)",
         inline=False
     )
 
@@ -107,14 +127,14 @@ async def clear(ctx, amount: int):
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member):
     await member.ban()
-    await ctx.send(f"⛔ {member.mention} banni")
+    await ctx.send(f"⛔ {member.mention} a été banni.")
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
 async def unban(ctx, user_id: int):
     user = await bot.fetch_user(user_id)
     await ctx.guild.unban(user)
-    await ctx.send(f"🔓 {user} débanni")
+    await ctx.send(f"🔓 {user} a été débanni.")
 
 @bot.command()
 @commands.has_permissions(moderate_members=True)
@@ -130,11 +150,11 @@ async def unmute(ctx, member: discord.Member):
     await ctx.send(f"🔊 {member.mention} unmute")
 
 # =========================
-# GIVEAWAY FULL
+# GIVEAWAY
 # =========================
 @bot.command()
 async def giveaway(ctx):
-    await ctx.send("🎁 Giveaway lancé ! Réagis 🎉")
+    await ctx.send("🎁 Giveaway lancé ! Réagissez avec 🎉")
 
     msg = await ctx.send("🎉 GIVEAWAY 🎉")
     await msg.add_reaction("🎉")
@@ -151,7 +171,7 @@ async def giveaway(ctx):
     await ctx.send(f"🏆 Gagnant : {winner.mention}")
 
 # =========================
-# TICKETS SETUP
+# SETUP TICKETS
 # =========================
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -168,34 +188,45 @@ async def setupticket(ctx):
         return r.role_mentions[0]
 
     ticket_config[ctx.guild.id] = {
-        "Report": await ask("🎭 REPORT role ?"),
-        "Donations": await ask("🎭 DONATIONS role ?"),
-        "Recrutement": await ask("🎭 RECRUTEMENT role ?"),
-        "Support": await ask("🎭 SUPPORT role ?"),
+        "Report": await ask("🎭 rôle staff REPORT ?"),
+        "Donations": await ask("🎭 rôle staff DONATIONS ?"),
+        "Recrutement": await ask("🎭 rôle staff RECRUTEMENT ?"),
+        "Support": await ask("🎭 rôle staff SUPPORT ?"),
     }
 
     embed = discord.Embed(
-        title="🎟 Tickets",
-        description="Choisis une catégorie",
+        title="🎟 Centre de Support",
+        description=(
+            "Bienvenue dans le système de support du serveur.\n\n"
+            "Merci de sélectionner une catégorie correspondant à votre demande.\n\n"
+            "🚨 Report → signaler un joueur ou problème\n"
+            "💰 Donations → faire un don au serveur\n"
+            "🧑‍💼 Recrutement → rejoindre le staff\n"
+            "🛠 Support → aide générale\n\n"
+            "⚠️ Merci de ne pas ouvrir de tickets inutiles."
+        ),
         color=0x2f3136
     )
 
     await ctx.send(embed=embed, view=TicketView())
 
 # =========================
-# TICKET PANEL
+# TICKET PANEL (AMÉLIORÉ)
 # =========================
 class TicketSelect(discord.ui.Select):
     def __init__(self):
 
         options = [
             discord.SelectOption(label="Report", emoji="🚨", description="Signaler un problème"),
-            discord.SelectOption(label="Donations", emoji="💰", description="Faire un don"),
-            discord.SelectOption(label="Recrutement", emoji="🧑‍💼", description="Rejoindre staff"),
+            discord.SelectOption(label="Donations", emoji="💰", description="Soutenir le serveur"),
+            discord.SelectOption(label="Recrutement", emoji="🧑‍💼", description="Rejoindre l’équipe"),
             discord.SelectOption(label="Support", emoji="🛠", description="Aide générale"),
         ]
 
-        super().__init__(placeholder="🎟 Choisis un ticket", options=options)
+        super().__init__(
+            placeholder="🎟 Sélectionnez une catégorie de support afin de créer un ticket adapté à votre demande...",
+            options=options
+        )
 
     async def callback(self, interaction):
 
@@ -205,13 +236,13 @@ class TicketSelect(discord.ui.Select):
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            user: discord.PermissionOverwrite(view_channel=True),
-            guild.me: discord.PermissionOverwrite(view_channel=True),
+            user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         }
 
         role = ticket_config.get(guild.id, {}).get(choice)
         if role:
-            overwrites[role] = discord.PermissionOverwrite(view_channel=True)
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
         channel = await guild.create_text_channel(
             name=f"ticket-{choice}-{user.name}".lower(),
@@ -227,7 +258,7 @@ class TicketSelect(discord.ui.Select):
             view=TicketControl()
         )
 
-        await interaction.response.send_message(f"Ticket créé {channel.mention}", ephemeral=True)
+        await interaction.response.send_message(f"🎟 Ticket créé : {channel.mention}", ephemeral=True)
 
 class TicketView(discord.ui.View):
     def __init__(self):
