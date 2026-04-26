@@ -154,22 +154,79 @@ async def unmute(ctx, member: discord.Member):
 # =========================
 @bot.command()
 async def giveaway(ctx):
-    await ctx.send("🎁 Giveaway lancé ! Réagissez avec 🎉")
 
-    msg = await ctx.send("🎉 GIVEAWAY 🎉")
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+
+    q1 = await ctx.send("🎁 Quel est le lot ?")
+    r1 = await bot.wait_for("message", check=check)
+    prize = r1.content
+    await q1.delete(); await r1.delete()
+
+    q2 = await ctx.send("👥 Combien de gagnants ?")
+    r2 = await bot.wait_for("message", check=check)
+    winners_count = int(r2.content)
+    await q2.delete(); await r2.delete()
+
+    q3 = await ctx.send("⏳ Durée (ex: 1h, 30m, 10s) ?")
+    r3 = await bot.wait_for("message", check=check)
+    duration = parse_time(r3.content)
+    await q3.delete(); await r3.delete()
+
+    end_time = datetime.now(timezone.utc) + timedelta(seconds=duration)
+
+    embed = discord.Embed(
+        title="🎁 Giveaway",
+        description=(
+            f"🏆 **Lot :** {prize}\n"
+            f"👥 **Gagnants :** {winners_count}\n"
+            f"⏱ **Fin :** <t:{int(end_time.timestamp())}:R>\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"👥 **Participants :** 0\n"
+            f"👑 **Hôte :** {ctx.author.mention}\n\n"
+            f"🎉 Réagissez avec 🎉 pour participer !"
+        ),
+        color=0x2f3136
+    )
+
+    msg = await ctx.send(embed=embed)
     await msg.add_reaction("🎉")
 
-    await asyncio.sleep(15)
+    for _ in range(max(1, duration // 5)):
+        await asyncio.sleep(5)
 
-    new = await ctx.channel.fetch_message(msg.id)
-    users = [u async for u in new.reactions[0].users() if not u.bot]
+        new_msg = await ctx.channel.fetch_message(msg.id)
+        users = [u async for u in new_msg.reactions[0].users() if not u.bot]
+
+        embed.description = (
+            f"🏆 **Lot :** {prize}\n"
+            f"👥 **Gagnants :** {winners_count}\n"
+            f"⏱ **Fin :** <t:{int(end_time.timestamp())}:R>\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n\n"
+            f"👥 **Participants :** {len(users)}\n"
+            f"👑 **Hôte :** {ctx.author.mention}\n\n"
+            f"🎉 Réagissez avec 🎉 pour participer !"
+        )
+
+        await msg.edit(embed=embed)
+
+    await asyncio.sleep(duration % 5)
+
+    new_msg = await ctx.channel.fetch_message(msg.id)
+    users = [u async for u in new_msg.reactions[0].users() if not u.bot]
 
     if not users:
-        return await ctx.send("❌ Aucun gagnant")
+        return await ctx.send("❌ Aucun participant.")
 
-    winner = random.choice(users)
-    await ctx.send(f"🏆 Gagnant : {winner.mention}")
+    winners = random.sample(users, min(winners_count, len(users)))
+    mentions = " ".join([w.mention for w in winners])
 
+    embed.color = 0x00ff99
+    embed.add_field(name="🏆 Gagnant(s)", value=mentions, inline=False)
+
+    await msg.edit(embed=embed)
+    await ctx.send(f"🎉 Félicitations {mentions} !")
+    
 # =========================
 # SETUP TICKETS
 # =========================
