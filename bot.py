@@ -21,6 +21,8 @@ bot = commands.Bot(command_prefix="+", intents=intents)
 # =========================
 ticket_config = {}
 ticket_claimed = {}
+user_stats = {}
+spam_cache = {}
 
 # =========================
 # TIME PARSER
@@ -38,7 +40,6 @@ def parse_time(time_str: str):
         elif unit == "d": seconds += value * 86400
         elif unit == "w": seconds += value * 604800
         elif unit == "o": seconds += value * 2592000
-
     return seconds
 
 # =========================
@@ -49,7 +50,28 @@ async def on_ready():
     print(f"Connecté en tant que {bot.user}")
 
 # =========================
-# INFO (RESTO ORIGINAL)
+# ANTI SPAM SIMPLE
+# =========================
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    uid = message.author.id
+    now = datetime.now().timestamp()
+
+    spam_cache.setdefault(uid, [])
+    spam_cache[uid].append(now)
+    spam_cache[uid] = [t for t in spam_cache[uid] if now - t < 5]
+
+    if len(spam_cache[uid]) > 5:
+        await message.channel.send(f"⚠️ {message.author.mention} stop spam")
+        return
+
+    await bot.process_commands(message)
+
+# =========================
+# INFO
 # =========================
 @bot.command()
 async def info(ctx):
@@ -70,7 +92,7 @@ async def info(ctx):
     await ctx.send(embed=embed)
 
 # =========================
-# CLEAR
+# MODERATION
 # =========================
 @bot.command()
 @commands.has_permissions(manage_messages=True)
@@ -81,14 +103,11 @@ async def clear(ctx, amount: int):
     await asyncio.sleep(2)
     await msg.delete()
 
-# =========================
-# BAN / UNBAN
-# =========================
 @bot.command()
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member):
     await member.ban()
-    await ctx.send(f"⛔ {member} banni")
+    await ctx.send(f"⛔ {member.mention} banni")
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
@@ -97,24 +116,21 @@ async def unban(ctx, user_id: int):
     await ctx.guild.unban(user)
     await ctx.send(f"🔓 {user} débanni")
 
-# =========================
-# MUTE / UNMUTE
-# =========================
 @bot.command()
 @commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member, time: str):
     seconds = parse_time(time)
     await member.edit(timed_out_until=datetime.now(timezone.utc) + timedelta(seconds=seconds))
-    await ctx.send(f"🔇 {member} mute")
+    await ctx.send(f"🔇 {member.mention} mute {time}")
 
 @bot.command()
 @commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member):
     await member.edit(timed_out_until=None)
-    await ctx.send(f"🔊 {member} unmute")
+    await ctx.send(f"🔊 {member.mention} unmute")
 
 # =========================
-# GIVEAWAY SIMPLE FIX
+# GIVEAWAY FULL
 # =========================
 @bot.command()
 async def giveaway(ctx):
@@ -123,7 +139,7 @@ async def giveaway(ctx):
     msg = await ctx.send("🎉 GIVEAWAY 🎉")
     await msg.add_reaction("🎉")
 
-    await asyncio.sleep(10)
+    await asyncio.sleep(15)
 
     new = await ctx.channel.fetch_message(msg.id)
     users = [u async for u in new.reactions[0].users() if not u.bot]
@@ -171,13 +187,15 @@ async def setupticket(ctx):
 # =========================
 class TicketSelect(discord.ui.Select):
     def __init__(self):
+
         options = [
-            discord.SelectOption(label="Report", emoji="🚨"),
-            discord.SelectOption(label="Donations", emoji="💰"),
-            discord.SelectOption(label="Recrutement", emoji="🧑‍💼"),
-            discord.SelectOption(label="Support", emoji="🛠"),
+            discord.SelectOption(label="Report", emoji="🚨", description="Signaler un problème"),
+            discord.SelectOption(label="Donations", emoji="💰", description="Faire un don"),
+            discord.SelectOption(label="Recrutement", emoji="🧑‍💼", description="Rejoindre staff"),
+            discord.SelectOption(label="Support", emoji="🛠", description="Aide générale"),
         ]
-        super().__init__(placeholder="Choisis un ticket", options=options)
+
+        super().__init__(placeholder="🎟 Choisis un ticket", options=options)
 
     async def callback(self, interaction):
 
@@ -203,7 +221,9 @@ class TicketSelect(discord.ui.Select):
         ticket_claimed[channel.id] = None
 
         await channel.send(
-            "📢 Un staff vous répondra bientôt.",
+            "🎟 **Votre ticket a bien été créé**\n\n"
+            "📢 Un staff vous répondra dans les plus brefs délais.\n"
+            "Merci de patienter 🙏",
             view=TicketControl()
         )
 
@@ -215,7 +235,7 @@ class TicketView(discord.ui.View):
         self.add_item(TicketSelect())
 
 # =========================
-# CLAIM / CLOSE STAFF ONLY
+# CLAIM / CLOSE
 # =========================
 class TicketControl(discord.ui.View):
 
