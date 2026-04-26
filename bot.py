@@ -56,7 +56,7 @@ async def on_ready():
     print(f"Connecté en tant que {bot.user}")
 
 # =========================
-# 📩 MESSAGE TRACKING
+# 📩 STATS MESSAGE
 # =========================
 @bot.event
 async def on_message(message):
@@ -70,7 +70,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # =========================
-# 🎙 VOCAL TRACKING
+# 🎙 STATS VOCAL
 # =========================
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -87,30 +87,45 @@ async def on_voice_state_update(member, before, after):
             user_stats[uid]["join"] = None
 
 # =========================
-# 📜 INFO
+# 📜 INFO UPDATED
 # =========================
 @bot.command()
 async def info(ctx):
     embed = discord.Embed(
         title="📜 Commandes du bot",
-        description="Toutes les commandes disponibles 👇",
+        description="Voici toutes les fonctionnalités disponibles 👇",
         color=0x2f3136
     )
 
     embed.add_field(
         name="🎁 Giveaway",
-        value="`+giveaway` → créer un giveaway interactif complet",
+        value=(
+            "`+giveaway` → créer un giveaway complet\n"
+            "• système privé + public\n"
+            "• boutons participer / quitter\n"
+            "• conditions (messages, vocal, rôle)"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🎟 Tickets",
+        value=(
+            "`+setupticket` → panel tickets (menu)\n"
+            "`+close` → fermer un ticket\n"
+            "• Report / Donations / Recrutement / Support"
+        ),
         inline=False
     )
 
     embed.add_field(
         name="🧹 Modération",
         value=(
-            "`+clear <nombre>`\n"
-            "`+ban @user [raison]`\n"
-            "`+unban <id>`\n"
-            "`+mute @user <temps>`\n"
-            "`+unmute @user`"
+            "`+clear <nombre>` → supprimer messages\n"
+            "`+ban @user` → bannir\n"
+            "`+unban <id>` → débannir\n"
+            "`+mute @user <temps>` → mute\n"
+            "`+unmute @user` → unmute"
         ),
         inline=False
     )
@@ -118,10 +133,9 @@ async def info(ctx):
     embed.add_field(
         name="⚙️ Système",
         value=(
-            "• stats messages & vocal\n"
-            "• conditions giveaway\n"
-            "• temps flexible (1d 2h 5m etc)\n"
-            "• interface boutons"
+            "• stats messages + vocal\n"
+            "• système temps (1d 2h 5m etc)\n"
+            "• interface boutons & menus"
         ),
         inline=False
     )
@@ -143,17 +157,14 @@ async def clear(ctx, amount: int):
     await msg.delete()
 
 # =========================
-# ⛔ BAN
+# ⛔ BAN / UNBAN
 # =========================
 @bot.command()
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member, *, reason=None):
-    await member.ban(reason=reason)
-    await ctx.send(f"⛔ {member.mention} a été banni.")
+async def ban(ctx, member: discord.Member):
+    await member.ban()
+    await ctx.send(f"⛔ {member.mention} banni.")
 
-# =========================
-# 🔓 UNBAN
-# =========================
 @bot.command()
 @commands.has_permissions(ban_members=True)
 async def unban(ctx, user_id: int):
@@ -162,7 +173,7 @@ async def unban(ctx, user_id: int):
     await ctx.send(f"🔓 {user} débanni.")
 
 # =========================
-# 🔇 MUTE
+# 🔇 MUTE / UNMUTE
 # =========================
 @bot.command()
 @commands.has_permissions(moderate_members=True)
@@ -173,9 +184,6 @@ async def mute(ctx, member: discord.Member, time: str):
     await member.edit(timed_out_until=until)
     await ctx.send(f"🔇 {member.mention} mute {time}.")
 
-# =========================
-# 🔊 UNMUTE
-# =========================
 @bot.command()
 @commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member):
@@ -183,153 +191,101 @@ async def unmute(ctx, member: discord.Member):
     await ctx.send(f"🔊 {member.mention} unmute.")
 
 # =========================
-# 🎁 GIVEAWAY VIEW
+# 🎟 TICKETS MENU
 # =========================
-class GiveawayView(discord.ui.View):
-    def __init__(self, msg_id):
+class TicketSelect(discord.ui.Select):
+    def __init__(self):
+
+        options = [
+            discord.SelectOption(label="Report", emoji="🚨"),
+            discord.SelectOption(label="Donations", emoji="💰"),
+            discord.SelectOption(label="Recrutement", emoji="🧑‍💼"),
+            discord.SelectOption(label="Support", emoji="🛠"),
+        ]
+
+        super().__init__(
+            placeholder="🎟 Choisis un type de ticket...",
+            min_values=1,
+            max_values=1,
+            options=options
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+
+        guild = interaction.guild
+        user = interaction.user
+        choice = self.values[0]
+
+        existing = discord.utils.get(guild.text_channels, name=f"ticket-{user.name}".lower())
+        if existing:
+            return await interaction.response.send_message(
+                "❌ Tu as déjà un ticket ouvert.",
+                ephemeral=True
+            )
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        }
+
+        channel = await guild.create_text_channel(
+            name=f"ticket-{choice}-{user.name}".lower(),
+            overwrites=overwrites,
+            topic=f"{choice} ticket de {user}"
+        )
+
+        await channel.send(
+            f"🎟 **Ticket {choice} ouvert**\n"
+            f"{user.mention}\n\n"
+            f"Explique ton problème ici.\n"
+            f"❌ `+close` pour fermer"
+        )
+
+        await interaction.response.send_message(
+            f"🎟 Ticket créé : {channel.mention}",
+            ephemeral=True
+        )
+
+class TicketView(discord.ui.View):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.msg_id = msg_id
-
-    @discord.ui.button(label="🎉 Participer", style=discord.ButtonStyle.success)
-    async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        data = giveaways.get(self.msg_id)
-        if not data or data["ended"]:
-            return await interaction.response.send_message("⛔ Giveaway terminé.", ephemeral=True)
-
-        member = interaction.user
-        stats = user_stats.get(member.id, {"messages": 0, "voice": 0})
-
-        missing = []
-
-        if data["role_req"] and data["role_req"] not in member.roles:
-            missing.append(f"🎭 rôle requis : {data['role_req'].mention}")
-
-        if stats["messages"] < data["msg_req"]:
-            missing.append(f"💬 messages requis : {data['msg_req']}")
-
-        if stats["voice"] < data["vc_req"]:
-            missing.append(f"🎙 vocal requis : {data['vc_req']}s")
-
-        if missing:
-            return await interaction.response.send_message(
-                "❌ Conditions non remplies :\n" + "\n".join(missing),
-                ephemeral=True
-            )
-
-        data["participants"].add(member.id)
-
-        await interaction.response.send_message(
-            "🎉 Tu es officiellement inscrit au giveaway ! Bonne chance 🍀",
-            ephemeral=True
-        )
-
-    @discord.ui.button(label="❌ Quitter", style=discord.ButtonStyle.danger)
-    async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        data = giveaways.get(self.msg_id)
-        if not data or data["ended"]:
-            return await interaction.response.send_message("⛔ Giveaway terminé.", ephemeral=True)
-
-        uid = interaction.user.id
-
-        if uid not in data["participants"]:
-            return await interaction.response.send_message(
-                "❌ Tu n’es pas inscrit au giveaway.",
-                ephemeral=True
-            )
-
-        data["participants"].remove(uid)
-
-        await interaction.response.send_message(
-            "👋 Tu as quitté le giveaway… la chance s’est envolée.",
-            ephemeral=True
-        )
+        self.add_item(TicketSelect())
 
 # =========================
-# 🎁 GIVEAWAY (PRIVATE SETUP + PUBLIC RESULT)
+# 🎟 SETUP PANEL
 # =========================
 @bot.command()
-async def giveaway(ctx):
-
-    def check(m):
-        return m.author == ctx.author and m.channel == ctx.channel
-
-    async def ask(question):
-        q = await ctx.send(f"📩 {question}")
-        msg = await bot.wait_for("message", check=check)
-
-        await q.delete()
-        await msg.delete()
-
-        return msg.content
-
-    # 🔒 SETUP PRIVÉ
-    prize = await ask("Quel est le lot ? 🎁")
-    winners = int(await ask("Nombre de gagnants ? 👥"))
-    duration = parse_time(await ask("Durée (ex: 1d 2h 5m) ⏱"))
-    msg_req = int(await ask("Messages requis ? 💬"))
-    vc_req = int(await ask("Temps vocal requis ? 🎙"))
-
-    role_msg = await ask("Rôle requis (ping ou none) 🎭")
-    role_req = ctx.message.role_mentions[0] if ctx.message.role_mentions else None
-
-    bypass_msg = await ask("Rôles bypass (ping ou none) 🚫")
-    bypass = ctx.message.role_mentions if ctx.message.role_mentions else []
-
-    # 🌍 GIVEAWAY PUBLIC
-    end = datetime.now(timezone.utc) + timedelta(seconds=duration)
+@commands.has_permissions(administrator=True)
+async def setupticket(ctx):
 
     embed = discord.Embed(
-        title="🎁 GIVEAWAY",
+        title="🎟 Support Tickets",
         description=(
-            f"🏆 **Lot :** {prize}\n"
-            f"👑 **Hôte :** {ctx.author.mention}\n\n"
-            f"📜 **Conditions :**\n"
-            f"💬 Messages : {msg_req}\n"
-            f"🎙 Vocal : {vc_req}s\n"
-            f"🎭 Rôle : {role_req.mention if role_req else 'Aucun'}\n\n"
-            f"⏳ Fin : <t:{int(end.timestamp())}:R>"
+            "Choisis une catégorie :\n\n"
+            "🚨 Report\n"
+            "💰 Donations\n"
+            "🧑‍💼 Recrutement\n"
+            "🛠 Support\n\n"
+            "⚠️ 1 ticket par utilisateur"
         ),
         color=0x2f3136
     )
 
-    msg = await ctx.send(embed=embed)
-    view = GiveawayView(msg.id)
-    await msg.edit(view=view)
+    await ctx.send(embed=embed, view=TicketView())
 
-    giveaways[msg.id] = {
-        "participants": set(),
-        "msg_req": msg_req,
-        "vc_req": vc_req,
-        "role_req": role_req,
-        "bypass": bypass,
-        "winners": winners,
-        "prize": prize,
-        "ended": False
-    }
+# =========================
+# ❌ CLOSE TICKET
+# =========================
+@bot.command()
+async def close(ctx):
 
-    await asyncio.sleep(duration)
+    if not ctx.channel.name.startswith("ticket-"):
+        return await ctx.send("❌ Pas un ticket.")
 
-    data = giveaways.get(msg.id)
-    if not data:
-        return
-
-    data["ended"] = True
-
-    participants = list(data["participants"])
-
-    if not participants:
-        return await ctx.send("❌ Aucun participant au giveaway.")
-
-    winners_list = random.sample(participants, min(winners, len(participants)))
-    mentions = " ".join(f"<@{i}>" for i in winners_list)
-
-    await ctx.send(
-        f"🎉 **GIVEAWAY TERMINÉ !**\n"
-        f"🏆 Gagnant(s) : {mentions}\n"
-        f"🎁 Lot : {prize}"
-    )
+    await ctx.send("🔒 Fermeture dans 5 secondes...")
+    await asyncio.sleep(5)
+    await ctx.channel.delete()
 
 # =========================
 # 🚀 RUN
