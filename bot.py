@@ -22,6 +22,7 @@ bot = commands.Bot(command_prefix="+", intents=intents)
 user_stats = {}
 giveaways = {}
 ticket_config = {}
+ticket_claimed = {}
 
 # =========================
 # ⏱ TIME PARSER
@@ -88,7 +89,7 @@ async def on_voice_state_update(member, before, after):
             user_stats[uid]["join"] = None
 
 # =========================
-# 📜 INFO (ancien style gardé)
+# 📜 INFO (STYLE ORIGINAL RESTAURÉ)
 # =========================
 @bot.command()
 async def info(ctx):
@@ -106,7 +107,7 @@ async def info(ctx):
 
     embed.add_field(
         name="🎟 Tickets",
-        value="`+setupticket` → panel tickets (menu déroulant)",
+        value="`+setupticket` → panel tickets (menu déroulant)\n`+close` → fermer un ticket",
         inline=False
     )
 
@@ -124,7 +125,7 @@ async def info(ctx):
 
     embed.add_field(
         name="⚙️ Système",
-        value="stats messages + vocal + temps (1d 2h 5m)",
+        value="stats messages + vocal + système temps (1d 2h 5m)",
         inline=False
     )
 
@@ -209,7 +210,6 @@ class TicketSelect(discord.ui.Select):
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         }
 
-        # staff par catégorie
         staff_role = ticket_config.get(guild.id, {}).get(choice)
         if staff_role:
             overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
@@ -219,11 +219,14 @@ class TicketSelect(discord.ui.Select):
             overwrites=overwrites
         )
 
+        ticket_claimed[channel.id] = None
+
         await channel.send(
             f"🎟 **Ticket {choice} ouvert**\n\n"
             f"👤 {user.mention}\n\n"
             f"📢 Un membre du staff vous répondra dans les plus brefs délais.\n"
-            f"Merci de patienter 🙏"
+            f"Merci de patienter 🙏",
+            view=TicketControlView()
         )
 
         await interaction.response.send_message(
@@ -237,7 +240,7 @@ class TicketView(discord.ui.View):
         self.add_item(TicketSelect())
 
 # =========================
-# 🎟 SETUP TICKETS (STAFF ROLES)
+# 🎟 SETUP TICKETS
 # =========================
 @bot.command()
 @commands.has_permissions(administrator=True)
@@ -264,16 +267,52 @@ async def setupticket(ctx):
         title="🎟 Support Tickets",
         description=(
             "📌 Choisis une catégorie :\n\n"
-            "🚨 Report → signaler un problème\n"
-            "💰 Donations → paiements / achats\n"
+            "🚨 Report → signaler un joueur\n"
+            "💰 Donations → faire un don au serveur\n"
             "🧑‍💼 Recrutement → rejoindre le staff\n"
             "🛠 Support → aide générale\n\n"
-            "📢 Un membre du staff vous répondra rapidement après ouverture du ticket."
+            "📢 Un membre du staff vous répondra rapidement."
         ),
         color=0x2f3136
     )
 
     await ctx.send(embed=embed, view=TicketView())
+
+# =========================
+# 🔘 CLAIM + CLOSE (STAFF ONLY)
+# =========================
+class TicketControlView(discord.ui.View):
+
+    @discord.ui.button(label="🟢 Claim", style=discord.ButtonStyle.success)
+    async def claim(self, interaction, button):
+
+        guild = interaction.guild
+        config = ticket_config.get(guild.id, {})
+        allowed = list(config.values())
+
+        if not any(r in interaction.user.roles for r in allowed):
+            return await interaction.response.send_message("❌ Staff only.", ephemeral=True)
+
+        if ticket_claimed.get(interaction.channel.id):
+            return await interaction.response.send_message("❌ Déjà claim.", ephemeral=True)
+
+        ticket_claimed[interaction.channel.id] = interaction.user.id
+        await interaction.channel.send(f"🟢 Claim par {interaction.user.mention}")
+        await interaction.response.send_message("✔ Claim OK", ephemeral=True)
+
+    @discord.ui.button(label="❌ Close", style=discord.ButtonStyle.danger)
+    async def close(self, interaction, button):
+
+        guild = interaction.guild
+        config = ticket_config.get(guild.id, {})
+        allowed = list(config.values())
+
+        if not any(r in interaction.user.roles for r in allowed):
+            return await interaction.response.send_message("❌ Staff only.", ephemeral=True)
+
+        await interaction.response.send_message("🔒 Fermeture...", ephemeral=True)
+        await asyncio.sleep(3)
+        await interaction.channel.delete()
 
 # =========================
 # 🚀 RUN
