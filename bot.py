@@ -5,6 +5,7 @@ import asyncio
 import re
 from datetime import datetime, timedelta, timezone
 from discord.ext import commands
+from discord import app_commands
 
 # =========================
 # INTENTS
@@ -22,6 +23,15 @@ bot = commands.Bot(command_prefix="+", intents=intents)
 ticket_config = {}
 ticket_claimed = {}
 spam_cache = {}
+# =========================
+# PERMISSIONS SYSTEM
+# =========================
+
+allowed_roles = {}
+
+def is_allowed(ctx):
+    roles = allowed_roles.get(ctx.guild.id, [])
+    return any(role.id in roles for role in ctx.author.roles)
 
 # =========================
 # TIME PARSER
@@ -47,8 +57,9 @@ def parse_time(time_str: str):
 # =========================
 @bot.event
 async def on_ready():
+    await bot.tree.sync()
     print(f"Connecté en tant que {bot.user}")
-
+    
 # =========================
 # ANTI-SPAM
 # =========================
@@ -74,6 +85,7 @@ async def on_message(message):
 # INFO (VERSION PLUS DÉTAILLÉE)
 # =========================
 @bot.command()
+@commands.check(is_allowed)
 async def info(ctx):
 
     embed = discord.Embed(
@@ -153,8 +165,9 @@ async def info(ctx):
 # GIVEAWAY
 # =========================
 @bot.command()
+@commands.check(is_allowed)
 async def giveaway(ctx):
-
+    
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel
 
@@ -417,6 +430,14 @@ class TicketControl(discord.ui.View):
         await interaction.response.send_message("Fermeture...", ephemeral=True)
         await asyncio.sleep(2)
         await interaction.channel.delete()
+        
+# =========================
+# ERREUR PERMISSION
+# =========================
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ Tu n'as pas la permission d'utiliser cette commande.")
 
 # =========================
 # RUN
