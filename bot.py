@@ -29,7 +29,7 @@ spam_cache = {}
 
 PERMISSIONS = {
     "giveaway": "Perm Giveway",
-    "clear": ["Perm Ban", "Perm Giveway"]
+    "clear": ["Perm Ban", "Perm Giveway"],
     "ban": "Perm Ban",
     "unban": "Perm Ban",
     "mute": "Perm Mute",
