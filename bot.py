@@ -258,14 +258,11 @@ async def clear(ctx, amount: int):
 
     amount = max(1, min(amount, 100))
 
+    await ctx.send("🧹 Suppression en cours...")
+
     deleted = await ctx.channel.purge(limit=amount + 1)
 
-    count = len(deleted) - 1  # on retire la commande
-
-    msg = await ctx.send(f"🧹 {count} message(s) supprimé(s)")
-
-    await asyncio.sleep(2)
-    await msg.delete()
+    await ctx.send(f"✔ {len(deleted)-1} message(s) supprimé(s)", delete_after=3)
 
 @bot.command()
 @commands.has_permissions(ban_members=True)
