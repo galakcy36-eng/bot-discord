@@ -148,6 +148,7 @@ async def info(ctx):
     embed.set_footer(text=f"Demandé par {ctx.author}", icon_url=ctx.author.avatar)
 
     await ctx.send(embed=embed)
+    
 # =========================
 # GIVEAWAY
 # =========================
