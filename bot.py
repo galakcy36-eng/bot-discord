@@ -157,6 +157,7 @@ async def giveaway(ctx):
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel
 
+    # QUESTIONS
     q1 = await ctx.send("🎁 Quel est le lot ?")
     r1 = await bot.wait_for("message", check=check)
     prize = r1.content
@@ -167,22 +168,51 @@ async def giveaway(ctx):
     winners_count = int(r2.content)
     await q2.delete(); await r2.delete()
 
-    q3 = await ctx.send("⏳ Durée (ex: 1h, 30m, 10s) ?")
+    q3 = await ctx.send("⏳ Durée ? (ex: 1h, 30m)")
     r3 = await bot.wait_for("message", check=check)
     duration = parse_time(r3.content)
     await q3.delete(); await r3.delete()
 
+    q4 = await ctx.send("💬 Nombre de messages requis pour participer ? (0 = aucun)")
+    r4 = await bot.wait_for("message", check=check)
+    msg_required = int(r4.content)
+    await q4.delete(); await r4.delete()
+
+    q5 = await ctx.send("🎤 Temps en vocal requis ? (ex: 10m, 1h, 0 = aucun)")
+    r5 = await bot.wait_for("message", check=check)
+    vocal_required = parse_time(r5.content) if r5.content != "0" else 0
+    await q5.delete(); await r5.delete()
+
+    q6 = await ctx.send("🎭 Rôle requis pour participer ? (ping ou 'aucun')")
+    r6 = await bot.wait_for("message", check=check)
+    role_required = r6.role_mentions[0] if r6.role_mentions else None
+    await q6.delete(); await r6.delete()
+
+    q7 = await ctx.send("🛡 Rôle bypass (ignore toutes les conditions) ? (ping ou 'aucun')")
+    r7 = await bot.wait_for("message", check=check)
+    bypass_role = r7.role_mentions[0] if r7.role_mentions else None
+    await q7.delete(); await r7.delete()
+
     end_time = datetime.now(timezone.utc) + timedelta(seconds=duration)
+
+    # TEXTE CONDITIONS
+    conditions = ""
+    conditions += f"• 💬 Messages : {msg_required}\n" if msg_required > 0 else ""
+    conditions += f"• 🎤 Vocal : {vocal_required}s\n" if vocal_required > 0 else ""
+    conditions += f"• 🎭 Rôle requis : {role_required.mention}\n" if role_required else ""
+    conditions += f"• 🛡 Bypass : {bypass_role.mention}\n" if bypass_role else ""
+    if conditions == "":
+        conditions = "Aucune condition"
 
     embed = discord.Embed(
         title="🎁 Giveaway",
         description=(
             f"🏆 **Lot :** {prize}\n"
             f"👥 **Gagnants :** {winners_count}\n"
+            f"👑 **Hôte :** {ctx.author.mention}\n"
             f"⏱ **Fin :** <t:{int(end_time.timestamp())}:R>\n\n"
+            f"📋 **Conditions :**\n{conditions}\n"
             f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"👥 **Participants :** 0\n"
-            f"👑 **Hôte :** {ctx.author.mention}\n\n"
             f"🎉 Réagissez avec 🎉 pour participer !"
         ),
         color=0x2f3136
@@ -191,25 +221,8 @@ async def giveaway(ctx):
     msg = await ctx.send(embed=embed)
     await msg.add_reaction("🎉")
 
-    for _ in range(max(1, duration // 5)):
-        await asyncio.sleep(5)
-
-        new_msg = await ctx.channel.fetch_message(msg.id)
-        users = [u async for u in new_msg.reactions[0].users() if not u.bot]
-
-        embed.description = (
-            f"🏆 **Lot :** {prize}\n"
-            f"👥 **Gagnants :** {winners_count}\n"
-            f"⏱ **Fin :** <t:{int(end_time.timestamp())}:R>\n\n"
-            f"━━━━━━━━━━━━━━━━━━\n\n"
-            f"👥 **Participants :** {len(users)}\n"
-            f"👑 **Hôte :** {ctx.author.mention}\n\n"
-            f"🎉 Réagissez avec 🎉 pour participer !"
-        )
-
-        await msg.edit(embed=embed)
-
-    await asyncio.sleep(duration % 5)
+    # ATTENTE FIN
+    await asyncio.sleep(duration)
 
     new_msg = await ctx.channel.fetch_message(msg.id)
     users = [u async for u in new_msg.reactions[0].users() if not u.bot]
@@ -220,12 +233,33 @@ async def giveaway(ctx):
     winners = random.sample(users, min(winners_count, len(users)))
     mentions = " ".join([w.mention for w in winners])
 
-    embed.color = 0x00ff99
-    embed.add_field(name="🏆 Gagnant(s)", value=mentions, inline=False)
+    # CLAIM SYSTEM
+    claim_time = 30
 
-    await msg.edit(embed=embed)
-    await ctx.send(f"🎉 Félicitations {mentions} !")
-    
+    giveaways[msg.id] = {
+        "winners": winners,
+        "claimed": False,
+        "users": users,
+        "winners_count": winners_count
+    }
+
+    await ctx.send(
+        f"🎉 Félicitations {mentions} !\n"
+        f"⏱ Vous avez {claim_time}s pour faire `+gwclaim`"
+    )
+
+    await asyncio.sleep(claim_time)
+
+    # REROLL SI PAS CLAIM
+    if not giveaways[msg.id]["claimed"]:
+
+        new_winners = random.sample(users, min(winners_count, len(users)))
+        new_mentions = " ".join([w.mention for w in new_winners])
+
+        await ctx.send(
+            f"🔁 Giveaway non réclamé !\n"
+            f"Nouveaux gagnants : {new_mentions}"
+        )
 # =========================
 # SETUP TICKETS
 # =========================
