@@ -23,6 +23,38 @@ bot = commands.Bot(command_prefix="+", intents=intents)
 ticket_config = {}
 ticket_claimed = {}
 spam_cache = {}
+# =========================
+# PERMISSIONS SYSTEM (GLOBAL)
+# =========================
+
+PERMISSIONS = {
+    "giveaway": "Perm Giveaway",
+    "clear": "Perm Ban",
+    "ban": "Perm Ban",
+    "unban": "Perm Ban",
+    "mute": "Perm Mute",
+    "unmute": "Perm Mute",
+    "info": ["Fondateur", "Co-Fondateur"],
+    "setupticket": ["Fondateur", "Co-Fondateur"]
+}
+
+def has_permission(ctx, command_name):
+    required = PERMISSIONS.get(command_name)
+
+    if required is None:
+        return True  # pas de restriction
+
+    if isinstance(required, str):
+        required = [required]
+
+    user_roles = [role.name for role in ctx.author.roles]
+
+    return any(role in user_roles for role in required)
+
+# CHECK GLOBAL AUTOMATIQUE
+@bot.check
+async def global_command_check(ctx):
+    return has_permission(ctx, ctx.command.name)
 
 # =========================
 # TIME PARSER
