@@ -34,8 +34,8 @@ PERMISSIONS = {
     "unban": "Perm Ban",
     "mute": "Perm Mute",
     "unmute": "Perm Mute",
-    "info": ["Fondateur", "Co-Fondateur"],
-    "setupticket": ["Fondateur", "Co-Fondateur"]
+    "info": ["👑 | Fondateur", "👑 | Co-Fondateur"],
+    "setupticket": ["👑 | Fondateur", "👑 | Co-Fondateur"]
 }
 
 def has_permission(ctx, command_name):
