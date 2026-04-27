@@ -250,6 +250,45 @@ async def giveaway(ctx):
     await msg.edit(embed=embed)
     await ctx.send(f"🎉 Félicitations {mentions} !")
 # =========================
+# MODERATION
+# =========================
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def clear(ctx, amount: int):
+    amount = max(1, min(amount, 100))
+    await ctx.channel.purge(limit=amount + 1)
+    msg = await ctx.send("🧹 Messages supprimés")
+    await asyncio.sleep(2)
+    await msg.delete()
+
+@bot.command()
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member):
+    await member.ban()
+    await ctx.send(f"⛔ {member.mention} a été banni.")
+
+@bot.command()
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, user_id: int):
+    user = await bot.fetch_user(user_id)
+    await ctx.guild.unban(user)
+    await ctx.send(f"🔓 {user} a été débanni.")
+
+@bot.command()
+@commands.has_permissions(moderate_members=True)
+async def mute(ctx, member: discord.Member, time: str):
+    seconds = parse_time(time)
+    await member.edit(
+        timed_out_until=datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    )
+    await ctx.send(f"🔇 {member.mention} mute pendant {time}")
+
+@bot.command()
+@commands.has_permissions(moderate_members=True)
+async def unmute(ctx, member: discord.Member):
+    await member.edit(timed_out_until=None)
+    await ctx.send(f"🔊 {member.mention} unmute")
+# =========================
 # SETUP TICKETS
 # =========================
 @bot.command()
