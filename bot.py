@@ -23,15 +23,6 @@ bot = commands.Bot(command_prefix="+", intents=intents)
 ticket_config = {}
 ticket_claimed = {}
 spam_cache = {}
-# =========================
-# PERMISSIONS SYSTEM
-# =========================
-
-allowed_roles = {}
-
-def is_allowed(ctx):
-    roles = allowed_roles.get(ctx.guild.id, [])
-    return any(role.id in roles for role in ctx.author.roles)
 
 # =========================
 # TIME PARSER
@@ -85,7 +76,6 @@ async def on_message(message):
 # INFO (VERSION PLUS DÉTAILLÉE)
 # =========================
 @bot.command()
-@commands.check(is_allowed)
 async def info(ctx):
 
     embed = discord.Embed(
@@ -165,7 +155,6 @@ async def info(ctx):
 # GIVEAWAY
 # =========================
 @bot.command()
-@commands.check(is_allowed)
 async def giveaway(ctx):
     
     def check(m):
@@ -431,14 +420,6 @@ class TicketControl(discord.ui.View):
         await asyncio.sleep(2)
         await interaction.channel.delete()
         
-# =========================
-# ERREUR PERMISSION
-# =========================
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CheckFailure):
-        await ctx.send("❌ Tu n'as pas la permission d'utiliser cette commande.")
-
 # =========================
 # RUN
 # =========================
