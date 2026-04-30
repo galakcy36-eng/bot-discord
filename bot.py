@@ -29,7 +29,6 @@ spam_cache = {}
 
 PERMISSIONS = {
     "giveaway": "Perm Giveway",
-    "reroll": "Perm Giveway",
     "clear": ["Perm Ban", "Perm Giveway"],
     "ban": "Perm Ban",
     "unban": "Perm Ban",
