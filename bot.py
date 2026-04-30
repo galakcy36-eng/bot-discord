@@ -29,6 +29,7 @@ spam_cache = {}
 
 PERMISSIONS = {
     "giveaway": "Perm Giveway",
+    "reroll": "Perm Giveway",
     "clear": ["Perm Ban", "Perm Giveway"],
     "ban": "Perm Ban",
     "unban": "Perm Ban",
@@ -283,6 +284,44 @@ async def giveaway(ctx):
 
     await msg.edit(embed=embed)
     await ctx.send(f"🎉 Félicitations {mentions} !")
+
+# =========================
+# REROLL
+# =========================
+@bot.command()
+@check_permission("Giveaway")
+async def reroll(ctx):
+
+    # On récupère les derniers messages du salon
+    async for message in ctx.channel.history(limit=50):
+
+        if message.author == bot.user and message.embeds:
+
+            embed = message.embeds[0]
+
+            # On vérifie que c'est un giveaway
+            if "GIVEAWAY" in embed.title:
+
+                try:
+                    reaction = discord.utils.get(message.reactions, emoji="🎉")
+
+                    if not reaction:
+                        return await ctx.send("❌ Aucun participant.")
+
+                    users = [u async for u in reaction.users() if not u.bot]
+
+                    if not users:
+                        return await ctx.send("❌ Aucun participant.")
+
+                    winner = random.choice(users)
+
+                    await ctx.send(f"🔄 Nouveau gagnant : {winner.mention}")
+                    return
+
+                except Exception:
+                    return await ctx.send("❌ Erreur lors du reroll.")
+
+    await ctx.send("❌ Aucun giveaway trouvé dans ce salon.")
 # =========================
 # MODERATION
 # =========================
